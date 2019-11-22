@@ -1,51 +1,120 @@
-#include<stdio.h>
-#include<speex/speex_echo.h>
-#include<speex/speex_preprocess.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <speex/speex_echo.h>
+#include <speex/speex_preprocess.h>
 
-#define NN 320
+#define NN 160
 #define TAIL 1600
 
-
-int main(int argc, char **argv){
+int main(int argc, char **argv)
+{
     FILE *outFile;
     FILE *inFile;
 
     SpeexPreprocessState *preprocessState;
     SpeexEchoState *echoState;
-    int sampleRate  16000;
+    int sampleRate = 16000;
 
-    short inBuffer[NN],outBuffer[NN];
+    spx_int16_t inBuffer[2 * NN];
 
-    if (argc = 2)
+    spx_int16_t micBuff[NN];
+    spx_int16_t refBuff[NN];
+    spx_int16_t outBuffer[2 * NN];
+
+    int read_size;
+
+    FILE *micFile, *refFile;
+    int i;
+    float f;
+    int isRight = 0;
+
+    printf("length = %d\n", argc);
+
+    switch (argc)
     {
-        inFile = fopen(argv[1]);
-        outFile = fopen(argv[2]);
-    }else if (argc == 1)
-    {
-        inFile = fopen(argv[1]);
-        outFile = fopen("./outFile.pcm");
+        case 6:
+            isRight = atoi(argv[5]);
+        case 5:
+            micFile = fopen(argv[3], "wb+");
+            refFile = fopen(argv[4], "wb+");
+        case 3:
+            outFile = fopen(argv[2], "wb+");
+        case 2:
+            inFile = fopen(argv[1], "rb");
+            break;
     }
-    else
+
+    if (!outFile)
     {
-        inFile = fopen("./inFile.pcm");
-        outFile = fopen("./outFile.pcm");
+        outFile = fopen("./outFile.pcm", "wb+");
+    }
+    if (!inFile)
+    {
+        inFile = fopen("./inFile.pcm", "rb");
+    }
+    if (!micFile)
+    {
+        micFile = fopen("micFile.pcm", "wb+");
+    }
+    if (!refFile)
+    {
+        refFile = fopen("./refFile.pcm", "wb+");
     }
 
-    echoState = speex_echo_state_init(NN,TAIL);
-    preprocessState = speex_preprocess_state_init(NN,sampleRate)
+    echoState = speex_echo_state_init(NN, TAIL);
+    preprocessState = speex_preprocess_state_init(NN, sampleRate);
     speex_echo_ctl(echoState, SPEEX_ECHO_SET_SAMPLING_RATE, &sampleRate);
+    i = 1;
+    speex_preprocess_ctl(preprocessState, SPEEX_PREPROCESS_SET_DENOISE, &i);
+    i = 0;
+    speex_preprocess_ctl(preprocessState, SPEEX_PREPROCESS_SET_AGC, &i);
+    i = 16000;
+    speex_preprocess_ctl(preprocessState, SPEEX_PREPROCESS_SET_AGC_LEVEL, &i);
+    i = 0;
+    speex_preprocess_ctl(preprocessState, SPEEX_PREPROCESS_SET_DEREVERB, &i);
+    f = .0;
+    speex_preprocess_ctl(preprocessState, SPEEX_PREPROCESS_SET_DEREVERB_DECAY, &f);
+    f = .0;
+    speex_preprocess_ctl(preprocessState, SPEEX_PREPROCESS_SET_DEREVERB_LEVEL, &f);
     speex_preprocess_ctl(preprocessState, SPEEX_PREPROCESS_SET_ECHO_STATE, echoState);
 
-
+    printf("isRight = %d\n",isRight);
 
     while (!feof(inFile))
     {
-        fread(inBuffer,NN,1,inFile);
+        read_size = fread(inBuffer, sizeof(spx_int16_t), 2 * NN, inFile);
         
+        if (isRight == 0)
+        {
+            for (size_t i = 0; i < read_size; i = i + 2)
+            {
+                micBuff[i / 2] = inBuffer[i];
+                refBuff[i / 2] = inBuffer[i + 1];
+            }   
+        }else{
+            for (size_t i = 0; i < read_size; i = i + 2)
+            {
+                refBuff[i / 2] = inBuffer[i];
+                micBuff[i / 2] = inBuffer[i + 1];
+            }   
+        }
+        
+
+
+        fwrite(micBuff, sizeof(spx_int16_t), NN, micFile);
+        fwrite(refBuff, sizeof(spx_int16_t), NN, refFile);
+
+        speex_echo_cancellation(echoState, micBuff, refBuff, outBuffer);
+        speex_preprocess_run(preprocessState, outBuffer);
+        fwrite(outBuffer, sizeof(spx_int16_t), NN, outFile);
     }
-    
 
-
-    int err = 0;
+    speex_echo_state_destroy(echoState);
+    speex_preprocess_state_destroy(preprocessState);
+    fclose(inFile);
+    fclose(outFile);
+    fclose(micFile);
+    fclose(refFile);
     return 0;
 }
