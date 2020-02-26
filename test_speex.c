@@ -7,6 +7,8 @@
 #define NN 160
 #define TAIL 1600
 
+#define BUFF_SIZE 320
+
 int main(int argc, char **argv)
 {
     FILE *outFile;
@@ -16,11 +18,11 @@ int main(int argc, char **argv)
     SpeexEchoState *echoState;
     int sampleRate = 16000;
 
-    spx_int16_t inBuffer[2 * NN];
+    spx_int16_t inBuffer[BUFF_SIZE];
 
-    spx_int16_t micBuff[NN];
-    spx_int16_t refBuff[NN];
-    spx_int16_t outBuffer[2 * NN];
+    spx_int16_t micBuff[BUFF_SIZE/2];
+    spx_int16_t refBuff[BUFF_SIZE/2];
+    spx_int16_t outBuffer[BUFF_SIZE/2];
 
     int read_size;
 
@@ -36,8 +38,8 @@ int main(int argc, char **argv)
         case 6:
             isRight = atoi(argv[5]);
         case 5:
-            micFile = fopen(argv[3], "wb+");
             refFile = fopen(argv[4], "wb+");
+            micFile = fopen(argv[3], "wb+");
         case 3:
             outFile = fopen(argv[2], "wb+");
         case 2:
@@ -83,7 +85,7 @@ int main(int argc, char **argv)
 
     while (!feof(inFile))
     {
-        read_size = fread(inBuffer, sizeof(spx_int16_t), 2 * NN, inFile);
+        read_size = fread(inBuffer, sizeof(spx_int16_t), BUFF_SIZE, inFile);
         
         if (isRight == 0)
         {
@@ -102,12 +104,12 @@ int main(int argc, char **argv)
         
 
 
-        fwrite(micBuff, sizeof(spx_int16_t), NN, micFile);
-        fwrite(refBuff, sizeof(spx_int16_t), NN, refFile);
+        fwrite(micBuff, sizeof(spx_int16_t), BUFF_SIZE/2, micFile);
+        fwrite(refBuff, sizeof(spx_int16_t), BUFF_SIZE/2, refFile);
 
         speex_echo_cancellation(echoState, micBuff, refBuff, outBuffer);
         speex_preprocess_run(preprocessState, outBuffer);
-        fwrite(outBuffer, sizeof(spx_int16_t), NN, outFile);
+        fwrite(outBuffer, sizeof(spx_int16_t), BUFF_SIZE/2, outFile);
     }
 
     speex_echo_state_destroy(echoState);
